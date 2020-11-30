@@ -8,4 +8,4 @@ function maketoken(length) {
     return result;
 }
 
-module.exports = { SECRET_TOKEN: maketoken(15) }
+module.exports = { maketoken }

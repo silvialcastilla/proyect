@@ -5,7 +5,9 @@ const nodeMailer = require('nodemailer');
 const MongoClient = require('mongodb').MongoClient;
 const databaseUrl = "mongodb://localhost:27017/";
 const jwt = require('jwt-simple');
-const config = require('../config')
+
+const { maketoken } = require('../proyect/config.js')
+const { artc } = require('../../artc')
 
 const server = express();
 const listenPort = 8080;
@@ -30,12 +32,13 @@ function makeid(length) {
 /**/
 
 function sendMailWithToken(adress, uri) {
+
     let transporter = nodeMailer.createTransport({
         service: 'hotmail',
         auth: {
             // should be replaced with real sender's account
             user: 'silvia.2@hotmail.com.ar',
-            pass: ''
+            pass: artc
         }
     });
     let mailOptions = {
@@ -58,7 +61,7 @@ function sendMailVerified(adress, uri) {
         auth: {
             // should be replaced with real sender's account
             user: 'silvia.2@hotmail.com.ar',
-            pass: ''
+            pass: artc
         }
     });
     let mailOptions = {
@@ -80,8 +83,13 @@ function logado(user) {
         usuario: user.username,
         correo: user.motdepass
     }
-    return jwt.encode(payload, config.SECRET_TOKEN)
+    const SECRET_TOKEN = maketoken(15)
+
+    return jwt.encode(payload, SECRET_TOKEN)
 }
+
+console.log(logado)
+
 
 server.post('/signup', (req, res) => {
 
@@ -95,10 +103,8 @@ server.post('/signup', (req, res) => {
     let regExpraza = /(\W|^)(humano|elfo|hobbit|enano)(\W|$)/g
     let testRegraza = regExpraza.test(raza)
 
-
     if (testRegemail == false || testRegpassword == false || testRegraza == false) {
         res.redirect('/');
-
     } else {
         res.redirect('/ConfirmEmail');
         let token = makeid(10)
@@ -124,18 +130,22 @@ server.get('/ConfirmEmail', (req, res) => {
 
 server.get('/checkEmail', (req, res) => {
 
-    async function validateToken(token) {
+    async function validateToken() {
         try {
             client = await MongoClient.connect(databaseUrl)
             dbTokens = client.db('exercice')
             let member = dbTokens.collection('sectamembers')
             let comparetoken = req.query.token
 
-            let result = await member.find({ "token": comparetoken })
+            //let result = await member.find({ "token": comparetoken }).count();
+            let result = await member.find({ "token": comparetoken }, { email: 1, _id: 0 }).toArray();
+            console.log(result[0].email);
 
-            if (result.toArray().length > 0) {
-                sendMailVerified(result.email, `${domain}/Login`)
+            console.log(comparetoken + " - " + result);
+            if (result[0].email !== undefined) {
+                sendMailVerified(result[0].email, `${domain}/Login`)
                 member.update({ token: comparetoken }, { $unset: { 'token': '' } })
+                res.redirect('/ConfirmedEmail')
             } else {
                 console.log('No puedes acceder a los datos');
                 res.redirect('/');
@@ -145,27 +155,36 @@ server.get('/checkEmail', (req, res) => {
         } finally {
             client.close()
         }
-    };
+    }
+    validateToken()
 })
 
-server.get('/checkUser', (req, res) => {
-    res.sendFile(path.join(__dirname, '/public', 'login.html'))
+server.get('/ConfirmedEmail', (req, res) => {
+    res.sendFile(path.join(__dirname, '/public', 'confirmed.html'));
+})
 
+server.get('/Login', (req, res) => {
+    res.sendFile(path.join(__dirname, '/public', 'login.html'));
+})
 
-    async function validateUser(email, password) {
+server.post('/checkUser', (req, res) => {
+
+    /*async function validateUser(email, password) {
+        let compareemail = email
+        let comparepassword = req.body.motdepass
+        console.log(compareemail)
         try {
             client = await MongoClient.connect(databaseUrl)
             dbTokens = client.db('exercice')
             let member = dbTokens.collection('sectamembers')
-            let compareemail = req.body.correo
-            let comparepassword = req.body.motdepass
+
 
             let resultemail = await member.find({ "email": compareemail }) //silvia@hotmail.com
             let resultpassword = await member.find({ "password": comparepassword }) //soy
             let notoken = await member.find({ "token": { $exist: false } })
 
             if ((resultemail.toArray().length > 0) || (resultpassword.toArray().length > 0) || notoken) {
-                await member.aggregate({ $addFields: { "authtoken": { logado() } } }) //Pasarla por insert
+                await member.aggregate({ $addFields: { "authtoken": logado() } }) //Pasarla por insert
                 res.redirect('/dashboard');
             } else {
                 res.redirect('/login');
@@ -175,7 +194,7 @@ server.get('/checkUser', (req, res) => {
         } finally {
             client.close()
         }
-    };
+}; validateUser() */
 })
 
 server.listen(listenPort, () => console.log(`Server started listening on ${listenPort}`));
